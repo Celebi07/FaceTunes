@@ -10,38 +10,6 @@ from utils.inference import apply_offsets
 from utils.inference import load_detection_model
 from utils.preprocessor import preprocess_input
 
-USE_WEBCAM = True    # If false, loads video file source
-
-# parameters for loading data and images
-emotion_model_path = 'emotion_model.hdf5'
-emotion_labels = get_labels('fer2013') 
-
-# hyper-parameters for bounding boxes shape
-frame_window = 10       # To be used for the mode comparison with the emotion window
-emotion_offsets = (20, 40)   # Hyperparameters for the bounding facial box
-
-# loading models
-face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')   # face detection model
-emotion_classifier = load_model(emotion_model_path)   # 'fer2013' dataset trained model for emotions
-
-# getting input model shapes for inference
-emotion_target_size = emotion_classifier.input_shape[1:3]
-
-# starting lists for calculating modes
-emotion_window = []
-
-# starting video streaming
-cv2.namedWindow('window_frame')
-
-video_capture = cv2.VideoCapture(0)       # 0 for default camera or source selection
-
-# Select video or webcam feed
-cap = None
-if USE_WEBCAM:
-    cap = cv2.VideoCapture(0) # Webcam source
-else:
-    cap = cv2.VideoCapture('./demo/dinner.mp4') # Video file source
-
 # Initialize empty dictionary for each emotion's occurrence count
 emotion_count = {
     'angry': 0,
@@ -53,77 +21,113 @@ emotion_count = {
     'neutral': 0
 }
 
-while cap.isOpened():
-    ret, bgr_image = cap.read()
+def video_detection():
+    USE_WEBCAM = True    # If false, loads video file source
 
-    gray_image = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2GRAY)     # gray image for HOGs
-    rgb_image = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)       # color image for video frame
+    # parameters for loading data and images
+    emotion_model_path = 'emotion_model.hdf5'
+    emotion_labels = get_labels('fer2013') 
 
-    faces = face_cascade.detectMultiScale(gray_image, scaleFactor=1.1, minNeighbors=5,     # image scaling
-			minSize=(30, 30), flags=cv2.CASCADE_SCALE_IMAGE)
+    # hyper-parameters for bounding boxes shape
+    frame_window = 10       # To be used for the mode comparison with the emotion window
+    emotion_offsets = (20, 40)   # Hyperparameters for the bounding facial box
 
-    for face_coordinates in faces:
-        x1, x2, y1, y2 = apply_offsets(face_coordinates, emotion_offsets)    # extracting faces from gray image
-        gray_face = gray_image[y1:y2, x1:x2]                                 # storing faces into gray_face
-        try:
-            gray_face = cv2.resize(gray_face, (emotion_target_size))       # resizing for emotion detection
-        except:
-            continue
+    # loading models
+    face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')   # face detection model
+    emotion_classifier = load_model(emotion_model_path)   # 'fer2013' dataset trained model for emotions
 
-        gray_face = preprocess_input(gray_face, True)      #converting image into a float 32bit Array
-        gray_face = np.expand_dims(gray_face, 0)          #adding 0 axis to the facial float 32-bit array
-        gray_face = np.expand_dims(gray_face, -1)             # adding a new axis to the facial 32-bit array
+    # getting input model shapes for inference
+    emotion_target_size = emotion_classifier.input_shape[1:3]
 
-        emotion_prediction = emotion_classifier.predict(gray_face)        # predicting the emotion
+    # starting lists for calculating modes
+    emotion_window = []
 
-        emotion_probability = np.max(emotion_prediction)                # select the emotion with the maximun probability
-        emotion_label_arg = np.argmax(emotion_prediction)              # return the index of the emotion with max probability
-        emotion_text = emotion_labels[emotion_label_arg]                # create the emotion label with the label from the index of emotion
+    # starting video streaming
+    # cv2.namedWindow('window_frame')
 
-        emotion_window.append(emotion_text)                             # add the label to emotion window
-        if len(emotion_window) > frame_window:                         # limiting the list to 10 items only
-            emotion_window.pop(0)
-        try:
-            emotion_mode = mode(emotion_window)                # find the mode of the emotion window items
-        except:
-            continue
+    video_capture = cv2.VideoCapture(0)       # 0 for default camera or source selection
 
-        # Append emotion to the corresponding list
-        emotion_count[emotion_mode] += 1
+    # Select video or webcam feed
+    cap = None
+    if USE_WEBCAM:
+        cap = cv2.VideoCapture(0) # Webcam source
+    else:
+        cap = cv2.VideoCapture('./demo/dinner.mp4') # Video file source
 
-        # Giving the text colors with numpy (R,G,B) values
-        if emotion_text == 'angry':
-            color = emotion_probability * np.asarray((255, 0, 0))
-        elif emotion_text == 'sad':
-            color = emotion_probability * np.asarray((0, 0, 255))
-        elif emotion_text == 'happy':
-            color = emotion_probability * np.asarray((255, 255, 0))
-        elif emotion_text == 'surprise':
-            color = emotion_probability * np.asarray((0, 255, 255))
-        elif emotion_text == 'Disgust':
-            color = emotion_probability * np.asarray((255, 0, 255))
-        elif emotion_text == 'fear':
-            color = emotion_probability * np.asarray((0, 255, 0))
-        else:
-            color = emotion_probability * np.asarray((0, 255, 167))
+    
 
-        color = color.astype(int)
-        color = color.tolist()
+    while cap.isOpened():
+        ret, bgr_image = cap.read()
 
-        draw_bounding_box(face_coordinates, rgb_image, color)           # finally drawing the the bounding box
-        draw_text(face_coordinates, rgb_image, emotion_mode, color, 0, -45, 1, 1)  # adding the emotion text
+        gray_image = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2GRAY)     # gray image for HOGs
+        rgb_image = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)       # color image for video frame
 
-    bgr_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
-    cv2.imshow('window_frame', bgr_image)
+        faces = face_cascade.detectMultiScale(gray_image, scaleFactor=1.1, minNeighbors=5,     # image scaling
+                minSize=(30, 30), flags=cv2.CASCADE_SCALE_IMAGE)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):  # exit conditions
-        break
+        for face_coordinates in faces:
+            x1, x2, y1, y2 = apply_offsets(face_coordinates, emotion_offsets)    # extracting faces from gray image
+            gray_face = gray_image[y1:y2, x1:x2]                                 # storing faces into gray_face
+            try:
+                gray_face = cv2.resize(gray_face, (emotion_target_size))       # resizing for emotion detection
+            except:
+                continue
+
+            gray_face = preprocess_input(gray_face, True)      #converting image into a float 32bit Array
+            gray_face = np.expand_dims(gray_face, 0)          #adding 0 axis to the facial float 32-bit array
+            gray_face = np.expand_dims(gray_face, -1)             # adding a new axis to the facial 32-bit array
+
+            emotion_prediction = emotion_classifier.predict(gray_face)        # predicting the emotion
+
+            emotion_probability = np.max(emotion_prediction)                # select the emotion with the maximun probability
+            emotion_label_arg = np.argmax(emotion_prediction)              # return the index of the emotion with max probability
+            emotion_text = emotion_labels[emotion_label_arg]                # create the emotion label with the label from the index of emotion
+
+            emotion_window.append(emotion_text)                             # add the label to emotion window
+            if len(emotion_window) > frame_window:                         # limiting the list to 10 items only
+                emotion_window.pop(0)
+            try:
+                emotion_mode = mode(emotion_window)                # find the mode of the emotion window items
+            except:
+                continue
+
+            # Append emotion to the corresponding list
+            emotion_count[emotion_mode] += 1
+
+            # Giving the text colors with numpy (R,G,B) values
+            if emotion_text == 'angry':
+                color = emotion_probability * np.asarray((255, 0, 0))
+            elif emotion_text == 'sad':
+                color = emotion_probability * np.asarray((0, 0, 255))
+            elif emotion_text == 'happy':
+                color = emotion_probability * np.asarray((255, 255, 0))
+            elif emotion_text == 'surprise':
+                color = emotion_probability * np.asarray((0, 255, 255))
+            elif emotion_text == 'Disgust':
+                color = emotion_probability * np.asarray((255, 0, 255))
+            elif emotion_text == 'fear':
+                color = emotion_probability * np.asarray((0, 255, 0))
+            else:
+                color = emotion_probability * np.asarray((0, 255, 167))
+
+            color = color.astype(int)
+            color = color.tolist()
+
+            draw_bounding_box(face_coordinates, rgb_image, color)           # finally drawing the the bounding box
+            draw_text(face_coordinates, rgb_image, emotion_mode, color, 0, -45, 1, 1)  # adding the emotion text
+
+        bgr_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
+        # cv2.imshow('window_frame', bgr_image)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):  # exit conditions
+            break
+        yield bgr_image
  
-cap.release()
+# cap.release()
 cv2.destroyAllWindows()
 
 # Find the emotion with the maximum occurrence count
-max_emotion = max(emotion_count, key=emotion_count.get)
+# max_emotion = max(emotion_count, key=emotion_count.get)
 
-# Print the maximum occurring emotion
-print("Maximum occurring emotion:", max_emotion)
+# # Print the maximum occurring emotion
+# print("Maximum occurring emotion:", max_emotion)

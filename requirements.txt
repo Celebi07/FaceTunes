@@ -1,3 +1,6 @@
 flask
 opencv-python
-keras
+tensorflow
+pandas
+matplotlib
+spotipy
